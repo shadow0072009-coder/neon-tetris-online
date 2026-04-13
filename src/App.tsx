@@ -9,17 +9,38 @@ import { useTetris } from './useTetris';
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 const socket = io(SERVER_URL);
 
-function Board({ grid, score, level, nextPieceType, gameOver, label, onMove, onRotate, onHardDrop, isRemote = false }: any) {
+function Board({ grid, score, level, nextPieceType, gameOver, label, onMove, onRotate, onHardDrop, isRemote = false, activePiece, ghostPos }: any) {
   const nextPiece = TETROMINOS[nextPieceType as TetrominoType];
+  
+  // Gridga soyani qo'shish
+  const finalDisplayGrid = grid.map((row: any[]) => [...row]);
+  if (!isRemote && activePiece && ghostPos) {
+    activePiece.shape.forEach((row: number[], y: number) => {
+      row.forEach((val, x) => {
+        if (val !== 0) {
+          const gy = y + ghostPos.y;
+          const gx = x + ghostPos.x;
+          if (gy >= 0 && gy < grid.length && gx >= 0 && gx < grid[0].length && finalDisplayGrid[gy][gx] === 0) {
+            finalDisplayGrid[gy][gx] = 'ghost';
+          }
+        }
+      });
+    });
+  }
+
   return (
     <div className="player-board-container">
       <h2 className="player-label">{label} {isRemote ? "(OPPONENT)" : "(YOU)"}</h2>
       <div className="game-layout">
         <div className="board">
-          {grid.map((row: any[], y: number) => row.map((cell, x) => (
-            <div key={`${y}-${x}`} className={`cell ${cell !== 0 ? 'filled' : ''}`}
-                 style={{ backgroundColor: cell !== 0 ? TETROMINOS[cell as TetrominoType].color : undefined,
-                          boxShadow: cell !== 0 ? `0 0 10px ${TETROMINOS[cell as TetrominoType].color}` : undefined }} />
+          {finalDisplayGrid.map((row: any[], y: number) => row.map((cell, x) => (
+            <div key={`${y}-${x}`} 
+                 className={`cell ${cell !== 0 ? 'filled' : ''} ${cell === 'ghost' ? 'ghost' : ''}`}
+                 style={{ 
+                   backgroundColor: (cell !== 0 && cell !== 'ghost') ? TETROMINOS[cell as TetrominoType].color : undefined,
+                   boxShadow: (cell !== 0 && cell !== 'ghost') ? `0 0 10px ${TETROMINOS[cell as TetrominoType].color}` : undefined,
+                   borderColor: cell === 'ghost' ? TETROMINOS[activePiece.type as TetrominoType].color : undefined
+                 }} />
           )))}
           {gameOver && <div className="board-overlay">GAME OVER</div>}
         </div>

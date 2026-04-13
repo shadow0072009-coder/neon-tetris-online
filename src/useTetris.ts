@@ -92,7 +92,12 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
     landPiece({ ...activePiece, pos: { ...activePiece.pos, y: cy } });
   }, [activePiece, grid, gameOver, isStarted, landPiece]);
 
-  useInterval(() => move({ x: 0, y: 1 }), isStarted ? dropTime : null);
+  const ghostPos = useMemo(() => {
+    if (!activePiece) return null;
+    let gy = activePiece.pos.y;
+    while (!checkCollision(activePiece.shape, { x: activePiece.pos.x, y: gy + 1 }, grid)) gy++;
+    return { ...activePiece.pos, y: gy };
+  }, [activePiece, grid]);
 
-  return { grid: displayGrid, nextPieceType, score, level, gameOver, resetGame, move, rotate: rotatePiece, hardDrop };
+  return { grid: displayGrid, activePiece, nextPieceType, score, level, gameOver, resetGame, move, rotate: rotatePiece, hardDrop, ghostPos };
 }
