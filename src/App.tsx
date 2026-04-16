@@ -61,10 +61,14 @@ function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, 
           <div className="info-box"><h3>Score</h3><p>{score}</p></div>
           <div className="info-box"><h3>Level</h3><p>{level}</p></div>
           <div className="info-box"><h3>Next</h3>
-            {nextPiece && <div className="next-preview" style={{ gridTemplateColumns: `repeat(${nextPiece.shape[0].length}, 25px)` }}>
-              {nextPiece.shape.map((row, y) => row.map((cell, x) => (
-                <div key={`n-${y}-${x}`} className="p-cell" style={{ backgroundColor: cell !== 0 ? nextPiece.color : 'transparent', boxShadow: cell !== 0 ? `0 0 5px ${nextPiece.color}` : 'none' }} />
-              )))}
+            {nextPiece && <div className="next-preview">
+              {nextPiece.shape.map((row: number[], y: number) => (
+                <div key={`n-r-${y}`} className="p-row">
+                  {row.map((cell, x) => (
+                    <div key={`n-${y}-${x}`} className="p-cell" style={{ backgroundColor: cell !== 0 ? nextPiece.color : 'transparent', boxShadow: cell !== 0 ? `0 0 5px ${nextPiece.color}` : 'none' }} />
+                  ))}
+                </div>
+              ))}
             </div>}
           </div>
         </div>
