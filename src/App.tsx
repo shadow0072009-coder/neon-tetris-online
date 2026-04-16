@@ -5,14 +5,13 @@ import { TETROMINOS } from './gameLogic';
 import type { TetrominoType } from './gameLogic';
 import { useTetris } from './useTetris';
 
-// Manzilni aniqlash: Internetda VITE_SERVER_URL ishlaydi, localda esa localhost:3001
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 const socket = io(SERVER_URL);
 
-function Board({ grid, score, level, nextPieceType, gameOver, label, onMove, onRotate, onHardDrop, isRemote = false, activePiece, ghostPos }: any) {
+function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, onMove, onRotate, onHardDrop, onHold, isRemote = false, activePiece, ghostPos }: any) {
   const nextPiece = TETROMINOS[nextPieceType as TetrominoType];
+  const hPiece = holdPiece ? TETROMINOS[holdPiece as TetrominoType] : null;
   
-  // Gridga soyani qo'shish
   const finalDisplayGrid = grid.map((row: any[]) => [...row]);
   if (!isRemote && activePiece && ghostPos) {
     activePiece.shape.forEach((row: number[], y: number) => {
@@ -32,13 +31,26 @@ function Board({ grid, score, level, nextPieceType, gameOver, label, onMove, onR
     <div className="player-board-container">
       <h2 className="player-label">{label} {isRemote ? "(OPPONENT)" : "(YOU)"}</h2>
       <div className="game-layout">
+        <div className="sidebar left-sidebar">
+          <div className="info-box"><h3>Hold</h3>
+            <div className="hold-preview">
+              {hPiece && hPiece.shape.map((row, y) => (
+                <div key={`h-${y}`} className="p-row">
+                  {row.map((cell, x) => (
+                    <div key={`h-${y}-${x}`} className="p-cell" style={{ backgroundColor: cell !== 0 ? hPiece.color : 'transparent', boxShadow: cell !== 0 ? `0 0 5px ${hPiece.color}` : 'none' }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
         <div className="board">
           {finalDisplayGrid.map((row: any[], y: number) => row.map((cell, x) => (
             <div key={`${y}-${x}`} 
-                 className={`cell ${cell !== 0 ? 'filled' : ''} ${cell === 'ghost' ? 'ghost' : ''}`}
+                 className={`cell ${cell !== 0 ? 'filled' : ''} ${cell === 'ghost' ? 'ghost' : ''} ${cell === 'garbage' ? 'garbage' : ''}`}
                  style={{ 
-                   backgroundColor: (cell !== 0 && cell !== 'ghost') ? TETROMINOS[cell as TetrominoType].color : undefined,
-                   boxShadow: (cell !== 0 && cell !== 'ghost') ? `0 0 10px ${TETROMINOS[cell as TetrominoType].color}` : undefined,
+                   backgroundColor: (cell !== 0 && cell !== 'ghost' && cell !== 'garbage') ? TETROMINOS[cell as TetrominoType].color : undefined,
+                   boxShadow: (cell !== 0 && cell !== 'ghost' && cell !== 'garbage') ? `0 0 10px ${TETROMINOS[cell as TetrominoType].color}` : undefined,
                    borderColor: cell === 'ghost' ? TETROMINOS[activePiece.type as TetrominoType].color : undefined
                  }} />
           )))}
@@ -55,11 +67,10 @@ function Board({ grid, score, level, nextPieceType, gameOver, label, onMove, onR
           </div>
         </div>
       </div>
-      
-      {/* MOBIL BOSHQARUV TUGMALARI */}
       {!isRemote && (
         <div className="touch-controls">
           <div className="c-row">
+            <button className="t-btn" onPointerDown={(e) => { e.preventDefault(); onHold(); }}>HOLD</button>
             <button className="t-btn rotate-btn" onPointerDown={(e) => { e.preventDefault(); onRotate(); }}>ROTATE</button>
           </div>
           <div className="c-row">
@@ -88,62 +99,50 @@ export default function App() {
     if (mode === 'ONLINE') socket.emit('game-state-sync', { roomCode: room, state }); 
   }, [mode, room]);
 
-  const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined);
-  const p2 = useTetris(settings, isStarted);
+  const onAttackP1 = useCallback((lines: number) => {
+    if (mode === 'LOCAL') p2.receiveGarbage(lines);
+    else if (mode === 'ONLINE') socket.emit('send-attack', { roomCode: room, lines });
+  }, [mode, room]);
+
+  const onAttackP2 = useCallback((lines: number) => {
+    if (mode === 'LOCAL') p1.receiveGarbage(lines);
+  }, [mode]);
+
+  const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined, onAttackP1);
+  const p2 = useTetris(settings, isStarted, undefined, onAttackP2);
 
   const startLocal = () => { setMode('LOCAL'); setIsStarted(true); p1.resetGame(); p2.resetGame(); };
-  const handleJoin = () => { if (room) { console.log("Joining room:", room); socket.emit('join-room', room); } };
+  const handleJoin = () => { if (room) socket.emit('join-room', room); };
 
   useEffect(() => {
-    socket.on('connect', () => console.log("Connected to server"));
-    socket.on('room-joined', ({ playerNumber }) => { 
-      console.log("Joined as player:", playerNumber);
-      setPNum(playerNumber); 
-      setMode('ONLINE'); 
-    });
-    socket.on('player-ready', () => { 
-      console.log("Opponent found! Starting...");
-      p1.resetGame(); 
-      setIsStarted(true); 
-    });
+    socket.on('room-joined', ({ playerNumber }) => { setPNum(playerNumber); setMode('ONLINE'); });
+    socket.on('player-ready', () => { p1.resetGame(); setIsStarted(true); });
     socket.on('opponent-state-sync', s => setOppState(s));
-    socket.on('opponent-disconnected', () => { 
-      alert('Opponent left'); 
-      setIsStarted(false);
-      setMode('MENU'); 
-    });
+    socket.on('receive-attack', ({ lines }) => p1.receiveGarbage(lines));
+    socket.on('opponent-disconnected', () => { alert('Opponent left'); setIsStarted(false); setMode('MENU'); });
     socket.on('error', (msg) => alert(msg));
-
-    return () => { 
-      socket.off('connect');
-      socket.off('room-joined'); 
-      socket.off('player-ready'); 
-      socket.off('opponent-state-sync'); 
-      socket.off('opponent-disconnected'); 
-      socket.off('error');
-    };
+    return () => { socket.off('room-joined'); socket.off('player-ready'); socket.off('opponent-state-sync'); socket.off('receive-attack'); socket.off('opponent-disconnected'); socket.off('error'); };
   }, [p1]);
 
   useEffect(() => {
     const hk = (e: KeyboardEvent) => {
       if (!isStarted) return;
       if (mode === 'LOCAL' || mode === 'ONLINE') {
-        if (e.key === 'a' || e.key === 'w' || e.key === 's' || e.key === 'd' || e.key === ' ') {
-          if (e.key === 'a') p1.move({x:-1, y:0}); 
-          if (e.key === 'd') p1.move({x:1, y:0});
-          if (e.key === 's') p1.move({x:0, y:1}); 
-          if (e.key === 'w') p1.rotate(); 
-          if (e.key === ' ') p1.hardDrop();
-        }
+        const k = e.key.toLowerCase();
+        if (k === 'a') p1.move({x:-1, y:0}); 
+        if (k === 'd') p1.move({x:1, y:0});
+        if (k === 's') p1.move({x:0, y:1}); 
+        if (k === 'w') p1.rotate(); 
+        if (k === ' ') p1.hardDrop();
+        if (k === 'c') p1.hold();
       }
       if (mode === 'LOCAL') {
-        if (e.key.includes('Arrow') || e.key === 'Enter') {
-          if (e.key === 'ArrowLeft') p2.move({x:-1, y:0}); 
-          if (e.key === 'ArrowRight') p2.move({x:1, y:0});
-          if (e.key === 'ArrowDown') p2.move({x:0, y:1}); 
-          if (e.key === 'ArrowUp') p2.rotate(); 
-          if (e.key === 'Enter') p2.hardDrop();
-        }
+        if (e.key === 'ArrowLeft') p2.move({x:-1, y:0}); 
+        if (e.key === 'ArrowRight') p2.move({x:1, y:0});
+        if (e.key === 'ArrowDown') p2.move({x:0, y:1}); 
+        if (e.key === 'ArrowUp') p2.rotate(); 
+        if (e.key === 'Enter') p2.hardDrop();
+        if (e.key.toLowerCase() === 'shift') p2.hold();
       }
     };
     window.addEventListener('keydown', hk); 
@@ -161,7 +160,7 @@ export default function App() {
   if (mode === 'LOBBY') return (
     <div className="s-panel">
       <h1>Online Lobby</h1>
-      <input type="text" placeholder="Room Code (e.g. 123)" value={room} onChange={e => setRoom(e.target.value)} />
+      <input type="text" placeholder="Room Code" value={room} onChange={e => setRoom(e.target.value)} />
       <button className="s-btn" onClick={handleJoin}>JOIN ROOM</button>
       <button className="s-btn" style={{background: '#333', marginTop: '10px'}} onClick={() => setMode('MENU')}>BACK</button>
     </div>
@@ -171,9 +170,9 @@ export default function App() {
     <div className="m-container">
       {mode === 'LOCAL' ? (
         <>
-          <Board {...p1} label="PLAYER 1" onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} />
+          <Board {...p1} label="PLAYER 1" onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} onHold={p1.hold} />
           <div className="div"></div>
-          <Board {...p2} label="PLAYER 2" onMove={p2.move} onRotate={p2.rotate} onHardDrop={p2.hardDrop} />
+          <Board {...p2} label="PLAYER 2" onMove={p2.move} onRotate={p2.rotate} onHardDrop={p2.hardDrop} onHold={p2.hold} />
         </>
       ) : (
         <>
@@ -185,7 +184,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              <Board {...p1} label={`PLAYER ${pNum}`} onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} />
+              <Board {...p1} label={`PLAYER ${pNum}`} onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} onHold={p1.hold} />
               <div className="div"></div>
               {oppState ? <Board {...oppState} label="OPPONENT" isRemote /> : <div className="info-box">Syncing opponent...</div>}
             </>

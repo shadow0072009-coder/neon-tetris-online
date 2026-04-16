@@ -28,6 +28,10 @@ io.on('connection', (socket) => {
     socket.to(roomCode).emit('opponent-state-sync', state);
   });
 
+  socket.on('send-attack', ({ roomCode, lines }) => {
+    socket.to(roomCode).emit('receive-attack', { lines });
+  });
+
   socket.on('disconnect', () => {
     rooms.forEach((room, roomCode) => {
       if (room.players.includes(socket.id)) {
