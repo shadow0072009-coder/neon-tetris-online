@@ -4,6 +4,7 @@ import './App.css';
 import { TETROMINOS } from './gameLogic';
 import type { TetrominoType } from './gameLogic';
 import { useTetris } from './useTetris';
+import { sounds } from './audio';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 const socket = io(SERVER_URL);
@@ -95,6 +96,15 @@ export default function App() {
   const [oppState, setOppState] = useState<any>(null);
   const settings = { startLevel: 1, initialSpeed: 1000, speedScaling: 100 };
 
+  const handleSound = useCallback((type: string, data?: any) => {
+    if (type === 'move') sounds.move();
+    if (type === 'rotate') sounds.rotate();
+    if (type === 'land') sounds.land();
+    if (type === 'clear') sounds.clear(data);
+    if (type === 'attack') sounds.attack();
+    if (type === 'gameOver') sounds.gameOver();
+  }, []);
+
   const onSync = useCallback((state: any) => { 
     if (mode === 'ONLINE') socket.emit('game-state-sync', { roomCode: room, state }); 
   }, [mode, room]);
@@ -108,8 +118,8 @@ export default function App() {
     if (mode === 'LOCAL') p1.receiveGarbage(lines);
   }, [mode]);
 
-  const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined, onAttackP1);
-  const p2 = useTetris(settings, isStarted, undefined, onAttackP2);
+  const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined, onAttackP1, handleSound);
+  const p2 = useTetris(settings, isStarted, undefined, onAttackP2, mode === 'LOCAL' ? handleSound : undefined);
 
   const startLocal = () => { setMode('LOCAL'); setIsStarted(true); p1.resetGame(); p2.resetGame(); };
   const handleJoin = () => { if (room) socket.emit('join-room', room); };
@@ -154,6 +164,7 @@ export default function App() {
       <h1>Neon Tetris Duo</h1>
       <button className="s-btn" onClick={startLocal}>LOCAL DUEL</button>
       <button className="s-btn" onClick={() => setMode('LOBBY')}>ONLINE DUEL</button>
+      <p style={{fontSize: '10px', color: '#444', marginTop: '20px'}}>Sound enabled</p>
     </div>
   );
 

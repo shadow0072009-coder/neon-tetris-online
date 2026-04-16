@@ -5,7 +5,7 @@ import { useInterval } from './useInterval';
 
 interface Settings { startLevel: number; initialSpeed: number; speedScaling: number; }
 
-export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: (state: any) => void, onAttack?: (lines: number) => void) {
+export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: (state: any) => void, onAttack?: (lines: number) => void, onSound?: (type: string, data?: any) => void) {
   const [grid, setGrid] = useState<(number | string)[][]>(createEmptyGrid());
   const [activePiece, setActivePiece] = useState<{ type: TetrominoType; pos: { x: number; y: number }; shape: number[][] } | null>(null);
   const [nextPieceType, setNextPieceType] = useState<TetrominoType>(randomTetromino());
@@ -46,17 +46,18 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
   }, [settings]);
 
   const receiveGarbage = useCallback((lines: number) => {
+    if (onSound) onSound('attack');
     setGrid(prev => {
-      const newGrid = prev.slice(lines); // Tepadan qatorlarni o'chirish
+      const newGrid = prev.slice(lines);
       for (let i = 0; i < lines; i++) {
         const garbageRow = Array(COLS).fill('garbage');
         const hole = Math.floor(Math.random() * COLS);
-        garbageRow[hole] = 0; // Bitta teshik qoldirish
+        garbageRow[hole] = 0;
         newGrid.push(garbageRow);
       }
       return newGrid;
     });
-  }, []);
+  }, [onSound]);
 
   const landPiece = useCallback((piece = activePiece, g = grid) => {
     if (!piece) return;
@@ -79,17 +80,19 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
       return acc;
     }, [] as (number | string)[][]);
 
-    // Attack logic: 2 lines -> 1 garbage, 3 lines -> 2, 4 lines -> 4
     if (cleared >= 2 && onAttack) {
       const attackLines = cleared === 4 ? 4 : cleared - 1;
       onAttack(attackLines);
     }
 
     if (cleared > 0) {
+      if (onSound) onSound('clear', cleared === 4);
       const ns = score + cleared * 100 * level; setScore(ns);
       if (ns >= level * 1000) {
         setLevel(l => l + 1); setDropTime(Math.max(100, settings.initialSpeed - level * settings.speedScaling));
       }
+    } else {
+      if (onSound) onSound('land');
     }
 
     setGrid(finalGrid);
@@ -97,15 +100,17 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
 
     const nType = nextPieceType;
     if (checkCollision(TETROMINOS[nType].shape, { x: Math.floor(COLS / 2) - 1, y: 0 }, finalGrid)) {
+      if (onSound) onSound('gameOver');
       setGameOver(true); setDropTime(null);
     } else {
       setActivePiece({ type: nType, pos: { x: Math.floor(COLS / 2) - 1, y: 0 }, shape: TETROMINOS[nType].shape });
       setNextPieceType(randomTetromino());
     }
-  }, [activePiece, grid, nextPieceType, level, score, settings, onAttack]);
+  }, [activePiece, grid, nextPieceType, level, score, settings, onAttack, onSound]);
 
   const hold = useCallback(() => {
     if (!activePiece || !canHold || gameOver || !isStarted) return;
+    if (onSound) onSound('rotate');
     const currentType = activePiece.type;
     if (holdPiece === null) {
       setHoldPiece(currentType);
@@ -119,20 +124,24 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
       setActivePiece({ type: fromHold, pos: { x: Math.floor(COLS / 2) - 1, y: 0 }, shape: TETROMINOS[fromHold].shape });
     }
     setCanHold(false);
-  }, [activePiece, holdPiece, canHold, nextPieceType, gameOver, isStarted]);
+  }, [activePiece, holdPiece, canHold, nextPieceType, gameOver, isStarted, onSound]);
 
   const move = useCallback((dir: { x: number; y: number }) => {
     if (!activePiece || gameOver || !isStarted) return;
     if (!checkCollision(activePiece.shape, { x: activePiece.pos.x + dir.x, y: activePiece.pos.y + dir.y }, grid)) {
+      if (onSound && dir.x !== 0) onSound('move');
       setActivePiece(prev => prev ? ({ ...prev, pos: { x: prev.pos.x + dir.x, y: prev.pos.y + dir.y } }) : null);
     } else if (dir.y > 0) landPiece();
-  }, [activePiece, grid, gameOver, isStarted, landPiece]);
+  }, [activePiece, grid, gameOver, isStarted, landPiece, onSound]);
 
   const rotatePiece = useCallback(() => {
     if (!activePiece || gameOver || !isStarted) return;
     const rs = rotate(activePiece.shape);
-    if (!checkCollision(rs, activePiece.pos, grid)) setActivePiece(prev => prev ? ({ ...prev, shape: rs }) : null);
-  }, [activePiece, grid, gameOver, isStarted]);
+    if (!checkCollision(rs, activePiece.pos, grid)) {
+      if (onSound) onSound('rotate');
+      setActivePiece(prev => prev ? ({ ...prev, shape: rs }) : null);
+    }
+  }, [activePiece, grid, gameOver, isStarted, onSound]);
 
   const hardDrop = useCallback(() => {
     if (!activePiece || gameOver || !isStarted) return;
@@ -150,5 +159,5 @@ export function useTetris(settings: Settings, isStarted: boolean, onStateSync?: 
 
   useInterval(() => move({ x: 0, y: 1 }), isStarted ? dropTime : null);
 
-  return { grid: displayGrid, activePiece, nextPieceType, holdPiece, score, level, gameOver, resetGame, move, rotate: rotatePiece, hardDrop, hold, receiveGarbage };
+  return { grid: displayGrid, activePiece, nextPieceType, holdPiece, score, level, gameOver, resetGame, move, rotate: rotatePiece, hardDrop, hold, receiveGarbage, ghostPos };
 }
