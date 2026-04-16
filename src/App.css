@@ -85,4 +85,40 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Segoe
 .s-panel h1 { color: #fff; font-size: 32px; margin: 0; text-align: center; letter-spacing: -1px; }
 .s-panel input { padding: 12px; background: #111; border: 1px solid #222; color: #fff; border-radius: 6px; text-align: center; font-size: 18px; }
 
+/* Leaderboard Styles */
+.records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.record-item {
+  display: grid;
+  grid-template-columns: 30px 1fr 80px;
+  background: #111;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #222;
+  align-items: center;
+}
+
+.record-item .rank { color: #555; font-weight: bold; }
+.record-item .name { color: #fff; text-align: left; padding-left: 10px; }
+.record-item .score { color: #00f0f0; font-weight: bold; text-align: right; font-family: monospace; }
+
+.submit-score {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: #111;
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #333;
+}
+
+.submit-score p { margin: 0; color: #00f0f0; font-size: 24px; font-weight: bold; }
+
 @media (max-width: 800px) { .m-container { flex-direction: column; gap: 50px; padding: 40px 20px; } .div { width: 80%; height: 2px; } }

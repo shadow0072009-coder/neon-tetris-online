@@ -89,11 +89,14 @@ function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, 
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'MENU' | 'LOCAL' | 'LOBBY' | 'ONLINE'>('MENU');
+  const [mode, setMode] = useState<'MENU' | 'LOCAL' | 'LOBBY' | 'ONLINE' | 'LEADERBOARD'>('MENU');
   const [room, setRoom] = useState('');
   const [isStarted, setIsStarted] = useState(false);
   const [pNum, setPNum] = useState<number | null>(null);
   const [oppState, setOppState] = useState<any>(null);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [scoreSubmitted, setScoreSubmitted] = useState(false);
   const settings = { startLevel: 1, initialSpeed: 1000, speedScaling: 100 };
 
   const handleSound = useCallback((type: string, data?: any) => {
@@ -121,17 +124,25 @@ export default function App() {
   const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined, onAttackP1, handleSound);
   const p2 = useTetris(settings, isStarted, undefined, onAttackP2, mode === 'LOCAL' ? handleSound : undefined);
 
-  const startLocal = () => { setMode('LOCAL'); setIsStarted(true); p1.resetGame(); p2.resetGame(); };
+  const startLocal = () => { setMode('LOCAL'); setIsStarted(true); p1.resetGame(); p2.resetGame(); setScoreSubmitted(false); };
   const handleJoin = () => { if (room) socket.emit('join-room', room); };
 
+  const submitScore = () => {
+    if (playerName.trim()) {
+      socket.emit('submit-score', { name: playerName, score: p1.score });
+      setScoreSubmitted(true);
+    }
+  };
+
   useEffect(() => {
-    socket.on('room-joined', ({ playerNumber }) => { setPNum(playerNumber); setMode('ONLINE'); });
+    socket.on('update-leaderboard', (data) => setLeaderboard(data));
+    socket.on('room-joined', ({ playerNumber }) => { setPNum(playerNumber); setMode('ONLINE'); setScoreSubmitted(false); });
     socket.on('player-ready', () => { p1.resetGame(); setIsStarted(true); });
     socket.on('opponent-state-sync', s => setOppState(s));
     socket.on('receive-attack', ({ lines }) => p1.receiveGarbage(lines));
     socket.on('opponent-disconnected', () => { alert('Opponent left'); setIsStarted(false); setMode('MENU'); });
     socket.on('error', (msg) => alert(msg));
-    return () => { socket.off('room-joined'); socket.off('player-ready'); socket.off('opponent-state-sync'); socket.off('receive-attack'); socket.off('opponent-disconnected'); socket.off('error'); };
+    return () => { socket.off('update-leaderboard'); socket.off('room-joined'); socket.off('player-ready'); socket.off('opponent-state-sync'); socket.off('receive-attack'); socket.off('opponent-disconnected'); socket.off('error'); };
   }, [p1]);
 
   useEffect(() => {
@@ -139,24 +150,17 @@ export default function App() {
       if (!isStarted) return;
       if (mode === 'LOCAL' || mode === 'ONLINE') {
         const k = e.key.toLowerCase();
-        if (k === 'a') p1.move({x:-1, y:0}); 
-        if (k === 'd') p1.move({x:1, y:0});
-        if (k === 's') p1.move({x:0, y:1}); 
-        if (k === 'w') p1.rotate(); 
-        if (k === ' ') p1.hardDrop();
-        if (k === 'c') p1.hold();
+        if (k === 'a') p1.move({x:-1, y:0}); if (k === 'd') p1.move({x:1, y:0});
+        if (k === 's') p1.move({x:0, y:1}); if (k === 'w') p1.rotate(); 
+        if (k === ' ') p1.hardDrop(); if (k === 'c') p1.hold();
       }
       if (mode === 'LOCAL') {
-        if (e.key === 'ArrowLeft') p2.move({x:-1, y:0}); 
-        if (e.key === 'ArrowRight') p2.move({x:1, y:0});
-        if (e.key === 'ArrowDown') p2.move({x:0, y:1}); 
-        if (e.key === 'ArrowUp') p2.rotate(); 
-        if (e.key === 'Enter') p2.hardDrop();
-        if (e.key.toLowerCase() === 'shift') p2.hold();
+        if (e.key === 'ArrowLeft') p2.move({x:-1, y:0}); if (e.key === 'ArrowRight') p2.move({x:1, y:0});
+        if (e.key === 'ArrowDown') p2.move({x:0, y:1}); if (e.key === 'ArrowUp') p2.rotate(); 
+        if (e.key === 'Enter') p2.hardDrop(); if (e.key.toLowerCase() === 'shift') p2.hold();
       }
     };
-    window.addEventListener('keydown', hk); 
-    return () => window.removeEventListener('keydown', hk);
+    window.addEventListener('keydown', hk); return () => window.removeEventListener('keydown', hk);
   }, [isStarted, mode, p1, p2]);
 
   if (mode === 'MENU') return (
@@ -164,7 +168,24 @@ export default function App() {
       <h1>Neon Tetris Duo</h1>
       <button className="s-btn" onClick={startLocal}>LOCAL DUEL</button>
       <button className="s-btn" onClick={() => setMode('LOBBY')}>ONLINE DUEL</button>
-      <p style={{fontSize: '10px', color: '#444', marginTop: '20px'}}>Sound enabled</p>
+      <button className="s-btn" style={{background: '#222', color: '#888'}} onClick={() => setMode('LEADERBOARD')}>RECORDS</button>
+    </div>
+  );
+
+  if (mode === 'LEADERBOARD') return (
+    <div className="s-panel">
+      <h1>Top Records</h1>
+      <div className="records-list">
+        {leaderboard.map((entry, i) => (
+          <div key={i} className="record-item">
+            <span className="rank">{i + 1}</span>
+            <span className="name">{entry.name}</span>
+            <span className="score">{entry.score}</span>
+          </div>
+        ))}
+        {leaderboard.length === 0 && <p>No records yet!</p>}
+      </div>
+      <button className="s-btn" onClick={() => setMode('MENU')}>BACK</button>
     </div>
   );
 
@@ -205,7 +226,16 @@ export default function App() {
       {(p1.gameOver || (mode==='LOCAL' && p2.gameOver) || (mode==='ONLINE' && oppState?.gameOver)) && (
         <div className="g-over">
           <h2>GAME OVER</h2>
-          <button className="s-btn" onClick={()=>{setIsStarted(false); setMode('MENU'); setOppState(null);}}>BACK TO MENU</button>
+          {!scoreSubmitted ? (
+            <div className="submit-score">
+              <p>Score: {p1.score}</p>
+              <input type="text" placeholder="Your Name" maxLength={10} value={playerName} onChange={e => setPlayerName(e.target.value)} />
+              <button className="s-btn" onClick={submitScore}>SUBMIT SCORE</button>
+            </div>
+          ) : (
+            <p>Score saved!</p>
+          )}
+          <button className="s-btn" style={{marginTop: '20px', background: '#333'}} onClick={()=>{setIsStarted(false); setMode('MENU'); setOppState(null);}}>BACK TO MENU</button>
         </div>
       )}
     </div>

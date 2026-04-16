@@ -9,8 +9,12 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 
 const rooms = new Map();
+let leaderboard = []; // Eng yaxshi natijalar shu yerda saqlanadi
 
 io.on('connection', (socket) => {
+  // Leaderboardni yuborish
+  socket.emit('update-leaderboard', leaderboard);
+
   socket.on('join-room', (roomCode) => {
     const room = rooms.get(roomCode) || { players: [] };
     if (room.players.length < 2) {
@@ -30,6 +34,14 @@ io.on('connection', (socket) => {
 
   socket.on('send-attack', ({ roomCode, lines }) => {
     socket.to(roomCode).emit('receive-attack', { lines });
+  });
+
+  // Yangi natijani qabul qilish
+  socket.on('submit-score', ({ name, score }) => {
+    leaderboard.push({ name, score, date: new Date().toLocaleDateString() });
+    leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard = leaderboard.slice(0, 10); // Faqat Top 10
+    io.emit('update-leaderboard', leaderboard); // Hammaga yangilangan ro'yxatni yuborish
   });
 
   socket.on('disconnect', () => {
