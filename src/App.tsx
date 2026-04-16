@@ -30,7 +30,7 @@ function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, 
 
   return (
     <div className="player-board-container">
-      <h2 className="player-label">{label} {isRemote ? "(OPPONENT)" : "(YOU)"}</h2>
+      <h2 className="player-label">{label} {isRemote ? "(OPPONENT)" : ""}</h2>
       <div className="game-layout">
         <div className="sidebar left-sidebar">
           <div className="info-box"><h3>Hold</h3>
@@ -52,13 +52,14 @@ function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, 
                  style={{ 
                    backgroundColor: (cell !== 0 && cell !== 'ghost' && cell !== 'garbage') ? TETROMINOS[cell as TetrominoType].color : undefined,
                    boxShadow: (cell !== 0 && cell !== 'ghost' && cell !== 'garbage') ? `0 0 10px ${TETROMINOS[cell as TetrominoType].color}` : undefined,
-                   borderColor: cell === 'ghost' ? TETROMINOS[activePiece.type as TetrominoType].color : undefined
+                   borderColor: cell === 'ghost' ? (activePiece ? TETROMINOS[activePiece.type as TetrominoType].color : '#555') : undefined
                  }} />
           )))}
           {gameOver && <div className="board-overlay">GAME OVER</div>}
         </div>
         <div className="sidebar">
           <div className="info-box"><h3>Score</h3><p>{score}</p></div>
+          <div className="info-box"><h3>Level</h3><p>{level}</p></div>
           <div className="info-box"><h3>Next</h3>
             {nextPiece && <div className="next-preview" style={{ gridTemplateColumns: `repeat(${nextPiece.shape[0].length}, 25px)` }}>
               {nextPiece.shape.map((row, y) => row.map((cell, x) => (
@@ -89,7 +90,7 @@ function Board({ grid, score, level, nextPieceType, holdPiece, gameOver, label, 
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'MENU' | 'LOCAL' | 'LOBBY' | 'ONLINE' | 'LEADERBOARD'>('MENU');
+  const [mode, setMode] = useState<'MENU' | 'SOLO' | 'LOCAL' | 'LOBBY' | 'ONLINE' | 'LEADERBOARD'>('MENU');
   const [room, setRoom] = useState('');
   const [isStarted, setIsStarted] = useState(false);
   const [pNum, setPNum] = useState<number | null>(null);
@@ -124,6 +125,7 @@ export default function App() {
   const p1 = useTetris(settings, isStarted, mode === 'ONLINE' ? onSync : undefined, onAttackP1, handleSound);
   const p2 = useTetris(settings, isStarted, undefined, onAttackP2, mode === 'LOCAL' ? handleSound : undefined);
 
+  const startSolo = () => { setMode('SOLO'); setIsStarted(true); p1.resetGame(); setScoreSubmitted(false); };
   const startLocal = () => { setMode('LOCAL'); setIsStarted(true); p1.resetGame(); p2.resetGame(); setScoreSubmitted(false); };
   const handleJoin = () => { if (room) socket.emit('join-room', room); };
 
@@ -148,7 +150,7 @@ export default function App() {
   useEffect(() => {
     const hk = (e: KeyboardEvent) => {
       if (!isStarted) return;
-      if (mode === 'LOCAL' || mode === 'ONLINE') {
+      if (mode === 'SOLO' || mode === 'LOCAL' || mode === 'ONLINE') {
         const k = e.key.toLowerCase();
         if (k === 'a') p1.move({x:-1, y:0}); if (k === 'd') p1.move({x:1, y:0});
         if (k === 's') p1.move({x:0, y:1}); if (k === 'w') p1.rotate(); 
@@ -166,6 +168,7 @@ export default function App() {
   if (mode === 'MENU') return (
     <div className="s-panel">
       <h1>Neon Tetris Duo</h1>
+      <button className="s-btn solo-btn" onClick={startSolo}>SOLO PLAY</button>
       <button className="s-btn" onClick={startLocal}>LOCAL DUEL</button>
       <button className="s-btn" onClick={() => setMode('LOBBY')}>ONLINE DUEL</button>
       <button className="s-btn" style={{background: '#222', color: '#888'}} onClick={() => setMode('LEADERBOARD')}>RECORDS</button>
@@ -200,13 +203,17 @@ export default function App() {
 
   return (
     <div className="m-container">
-      {mode === 'LOCAL' ? (
+      {mode === 'SOLO' && (
+        <Board {...p1} label="SOLO" onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} onHold={p1.hold} />
+      )}
+      {mode === 'LOCAL' && (
         <>
           <Board {...p1} label="PLAYER 1" onMove={p1.move} onRotate={p1.rotate} onHardDrop={p1.hardDrop} onHold={p1.hold} />
           <div className="div"></div>
           <Board {...p2} label="PLAYER 2" onMove={p2.move} onRotate={p2.rotate} onHardDrop={p2.hardDrop} onHold={p2.hold} />
         </>
-      ) : (
+      )}
+      {mode === 'ONLINE' && (
         <>
           {!isStarted ? (
             <div className="s-panel">
